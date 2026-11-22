@@ -24,6 +24,8 @@ export const appConfig: ApplicationConfig = {
       routes,
       withComponentInputBinding(),
       withViewTransitions({
+        // No crossfade on first load: nothing to fade from, and it can stall in a background tab.
+        skipInitialTransition: true,
         // Only animate between pages. Query param changes (wizard steps, table filters) stay instant.
         onViewTransitionCreated: ({ transition, from, to }) => {
           // The transition still runs, just without animation. Skipping it would make Angular log

@@ -51,7 +51,8 @@ import { Icon } from '../shared/ui/icon';
     <footer class="footer">
       <div class="inner">
         <span
-          >Tidewell is a fictional insurer. This is a portfolio demo, no real data is sent.</span
+          ><strong>Portfolio demo.</strong> Tidewell is a fictional insurer. Nothing you enter
+          leaves your browser.</span
         >
         <span>Claims line: +1 503 555 0100 · Mon–Fri, 8:00–18:00</span>
       </div>
