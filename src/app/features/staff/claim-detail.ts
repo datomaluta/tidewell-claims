@@ -20,6 +20,7 @@ import { formatDate } from '../../core/validators';
 import { canAssign, isFinal } from '../../core/workflow';
 import { Avatar } from '../../shared/ui/avatar';
 import { Icon } from '../../shared/ui/icon';
+import { FileSizePipe } from '../../shared/ui/file-size.pipe';
 import { StatusBadge } from '../../shared/ui/status-badge';
 import { ToastService } from '../../shared/ui/toast.service';
 import { ClaimActions } from './claim-actions';
@@ -44,6 +45,7 @@ function httpStatus(err: unknown): number | null {
     StatusBadge,
     ClaimActions,
     ClaimTimeline,
+    FileSizePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -298,7 +300,10 @@ function httpStatus(err: unknown): number | null {
                       />
                     </span>
                     <span class="doc-name">{{ d.name }}</span>
-                    <span class="muted">{{ d.size / 1024 / 1024 | number: '1.1-1' }} MB</span>
+                    @if (fromReply().get(d.id); as at) {
+                      <span class="chip new">From reply · {{ at | date: 'MMM d' }}</span>
+                    }
+                    <span class="muted">{{ d.size | fileSize }}</span>
                   </li>
                 }
               </ul>
@@ -590,6 +595,13 @@ function httpStatus(err: unknown): number | null {
       color: var(--text-2);
       flex-shrink: 0;
     }
+    .chip.new {
+      flex-shrink: 0;
+      height: 22px;
+      background: var(--success-soft);
+      color: var(--success);
+      font-size: 12px;
+    }
     .doc-name {
       flex: 1;
       min-width: 0;
@@ -669,6 +681,16 @@ export class ClaimDetail {
   protected readonly deductible = computed(() =>
     this.policy.hasValue() ? this.policy.value().deductible : null,
   );
+
+  /** Documents the claimant sent later with a reply, mapped to when they arrived. */
+  protected readonly fromReply = computed(() => {
+    const map = new Map<string, string>();
+    if (!this.claim.hasValue()) return map;
+    for (const e of this.claim.value().events) {
+      if (e.kind === 'reply') e.documents?.forEach((d) => map.set(d.id, e.at));
+    }
+    return map;
+  });
 
   protected readonly notFound = computed(() => httpStatus(this.claim.error()) === 404);
 

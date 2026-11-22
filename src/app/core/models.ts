@@ -165,7 +165,7 @@ export interface ClaimInput {
   documents: ClaimDocument[];
 }
 
-export type ClaimEventKind = 'submitted' | 'status' | 'assigned' | 'note';
+export type ClaimEventKind = 'submitted' | 'status' | 'assigned' | 'note' | 'reply';
 
 export interface ClaimEvent {
   id: string;
@@ -176,6 +176,8 @@ export interface ClaimEvent {
   to?: ClaimStatus;
   /** For `status` events moving to needs_info or rejected this is shown to the claimant. */
   note?: string;
+  /** Files the claimant sent with a `reply`. */
+  documents?: ClaimDocument[];
 }
 
 export interface Claim extends ClaimInput {
@@ -197,7 +199,15 @@ export interface PublicClaim {
   createdAt: string;
   updatedAt: string;
   total: number;
-  timeline: { at: string; status: ClaimStatus; message: string | null }[];
+  timeline: { at: string; status: ClaimStatus; message: string | null; fromClaimant: boolean }[];
+}
+
+/** What a claimant sends back after the claims team asked for more information. */
+export interface ClaimReply {
+  number: string;
+  lastName: string;
+  message: string;
+  documents: ClaimDocument[];
 }
 
 export interface ClaimSummary {
@@ -210,6 +220,8 @@ export interface ClaimSummary {
   createdAt: string;
   incidentDate: string;
   assigneeId: string | null;
+  /** The claimant answered a request for information and nobody has acted on it yet. */
+  replied: boolean;
 }
 
 export interface ClaimPage {
@@ -222,7 +234,8 @@ export interface ClaimPage {
 
 /* --------------------------------- audit --------------------------------- */
 
-export type AuditAction = 'claim_submitted' | 'status_changed' | 'assigned' | 'note_added';
+export type AuditAction =
+  'claim_submitted' | 'claimant_replied' | 'status_changed' | 'assigned' | 'note_added';
 
 export interface AuditEntry {
   id: string;

@@ -8,6 +8,7 @@ import { ClaimStatus, PublicClaim, STATUS_LABELS } from '../../core/models';
 import { errorText, showError } from '../../core/validators';
 import { Icon } from '../../shared/ui/icon';
 import { StatusBadge } from '../../shared/ui/status-badge';
+import { TrackReply } from './track-reply';
 
 /** The happy path shown as a progress line. Needs info and rejected are shown as side states. */
 const PATH: ClaimStatus[] = ['submitted', 'in_review', 'approved', 'paid'];
@@ -25,7 +26,7 @@ const STATUS_HELP: Record<ClaimStatus, string> = {
 
 @Component({
   selector: 'app-track',
-  imports: [ReactiveFormsModule, Icon, StatusBadge, DatePipe, CurrencyPipe],
+  imports: [ReactiveFormsModule, Icon, StatusBadge, DatePipe, CurrencyPipe, TrackReply],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="wrap">
@@ -72,6 +73,15 @@ const STATUS_HELP: Record<ClaimStatus, string> = {
         </button>
       </form>
 
+      <p class="demo">
+        <app-icon name="info" [size]="15" />
+        <span>
+          Demo: claim <span class="mono">{{ demo.number }}</span> for {{ demo.lastName }} is waiting
+          for more information.
+        </span>
+        <button class="link" type="button" (click)="tryDemo()">Try it</button>
+      </p>
+
       <div aria-live="polite">
         @if (notFound()) {
           <div class="state card">
@@ -103,6 +113,18 @@ const STATUS_HELP: Record<ClaimStatus, string> = {
 
             <p class="help">{{ help(c.status) }}</p>
 
+            @if (replied()) {
+              <div class="alert success" role="status">
+                <app-icon name="circle-check" />
+                <div class="alert-body">
+                  <strong>Thanks, we've got your reply.</strong>
+                  <p>
+                    Your claim is back with the agent. We'll be in touch if we need anything else.
+                  </p>
+                </div>
+              </div>
+            }
+
             @if (latestMessage(c); as m) {
               <div
                 class="alert"
@@ -115,6 +137,14 @@ const STATUS_HELP: Record<ClaimStatus, string> = {
                   <p>{{ m }}</p>
                 </div>
               </div>
+            }
+
+            @if (c.status === 'needs_info' && lookup(); as l) {
+              <app-track-reply
+                [number]="c.number"
+                [lastName]="l.lastName"
+                (sent)="onReplied($event)"
+              />
             }
 
             <ol class="path" aria-label="Progress">
@@ -144,8 +174,12 @@ const STATUS_HELP: Record<ClaimStatus, string> = {
             <h3>History</h3>
             <ul class="timeline">
               @for (e of reversed(c); track $index) {
-                <li>
-                  <app-status-badge [status]="e.status" />
+                <li [class.mine]="e.fromClaimant">
+                  @if (e.fromClaimant) {
+                    <span class="chip"><app-icon name="send" [size]="13" /> Your reply</span>
+                  } @else {
+                    <app-status-badge [status]="e.status" />
+                  }
                   <time [attr.datetime]="e.at">{{ e.at | date: 'MMM d, h:mm a' }}</time>
                   @if (e.message) {
                     <p>{{ e.message }}</p>
@@ -188,6 +222,39 @@ const STATUS_HELP: Record<ClaimStatus, string> = {
     }
     .error-text:empty {
       display: none;
+    }
+    .demo {
+      display: flex;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      margin: 12px 2px 0;
+      font-size: 13.5px;
+      color: var(--text-2);
+      app-icon {
+        margin-top: 2px;
+        color: var(--text-3);
+      }
+      span {
+        flex: 1;
+        min-width: 0;
+      }
+      .mono {
+        flex: none;
+        color: var(--text);
+      }
+    }
+    .link {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--primary);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      &:hover {
+        text-decoration: underline;
+      }
     }
     .state,
     .result {
@@ -309,7 +376,18 @@ const STATUS_HELP: Record<ClaimStatus, string> = {
         width: 100%;
         margin: 0;
         color: var(--text-2);
+        white-space: pre-line;
+        overflow-wrap: anywhere;
       }
+      .mine p {
+        padding: 8px 12px;
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        color: var(--text);
+      }
+    }
+    .alert.success {
+      margin-bottom: 14px;
     }
     @media (max-width: 640px) {
       .wrap {
@@ -339,10 +417,15 @@ export class Track {
   private readonly fb = inject(NonNullableFormBuilder);
 
   protected readonly path = PATH;
+  /** A seeded claim in "needs info", so visitors can try replying without the staff portal. */
+  protected readonly demo = { number: `TW-${new Date().getFullYear()}-01020`, lastName: 'Brooks' };
   protected readonly loading = signal(false);
   protected readonly claim = signal<PublicClaim | null>(null);
   protected readonly notFound = signal<string | null>(null);
   protected readonly failed = signal<string | null>(null);
+  /** What the claim was looked up with; the reply form sends the same pair. */
+  protected readonly lookup = signal<{ number: string; lastName: string } | null>(null);
+  protected readonly replied = signal(false);
 
   protected readonly form = this.fb.group({
     number: this.fb.control('', [
@@ -372,12 +455,19 @@ export class Track {
     return errorText(control.errors) ?? '';
   }
 
+  protected tryDemo(): void {
+    this.form.setValue({ ...this.demo });
+    this.search();
+  }
+
   protected search(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
     }
     const { number, lastName } = this.form.getRawValue();
+    this.lookup.set({ number, lastName });
+    this.replied.set(false);
     this.loading.set(true);
     this.notFound.set(null);
     this.failed.set(null);
@@ -396,6 +486,11 @@ export class Track {
         }
       },
     });
+  }
+
+  protected onReplied(claim: PublicClaim): void {
+    this.claim.set(claim);
+    this.replied.set(true);
   }
 
   protected label(status: ClaimStatus): string {

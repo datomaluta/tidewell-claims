@@ -1,4 +1,3 @@
-import { HttpEventType } from '@angular/common/http';
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
@@ -11,7 +10,6 @@ import {
 } from '@angular/forms';
 import {
   Observable,
-  Subscription,
   catchError,
   debounceTime,
   filter,
@@ -23,7 +21,7 @@ import {
   timer,
 } from 'rxjs';
 import { Api } from '../../core/api';
-import { errorMessage } from '../../core/http/http-error';
+import { FileUploader } from '../../shared/upload/file-uploader';
 import {
   ClaimDocument,
   ClaimInput,
@@ -35,9 +33,7 @@ import {
 } from '../../core/models';
 import { storage } from '../../core/storage';
 import {
-  FILE_RULES,
   POLICY_NUMBER_PATTERN,
-  checkFile,
   errorText,
   minItems,
   normalizePolicyNumber,
@@ -57,15 +53,6 @@ export interface StepDef {
 }
 
 export type LookupState = 'idle' | 'checking' | 'found' | 'notFound' | 'error';
-
-export interface Upload {
-  key: string;
-  file: File;
-  progress: number;
-  state: 'uploading' | 'error';
-  error?: string;
-  sub?: Subscription;
-}
 
 interface Draft {
   savedAt: string;
@@ -106,9 +93,6 @@ export class ClaimFormService {
 
   readonly policy = signal<Policy | null>(null);
   readonly lookupState = signal<LookupState>('idle');
-  readonly uploads = signal<Upload[]>([]);
-  /** Object URLs for image previews, by document id. Only kept for this session. */
-  readonly previews = signal<Record<string, string>>({});
   readonly lastSaved = signal<Date | null>(null);
   /** Index of the furthest step the user has reached. */
   readonly reached = signal(0);
@@ -268,10 +252,7 @@ export class ClaimFormService {
       )
       .subscribe(() => this.saveDraft());
 
-    this.destroyRef.onDestroy(() => {
-      this.uploads().forEach((u) => u.sub?.unsubscribe());
-      Object.values(this.previews()).forEach((url) => URL.revokeObjectURL(url));
-    });
+    this.destroyRef.onDestroy(() => this.uploader.destroy());
   }
 
   /* ------------------------------ template helpers ------------------------------ */
@@ -378,80 +359,21 @@ export class ClaimFormService {
 
   /* ----------------------------------- uploads ---------------------------------- */
 
-  readonly documentCount = computed(() => {
-    this.tick();
-    return this.form.controls.documents.value.length + this.uploads().length;
+  readonly uploader = new FileUploader(this.api, {
+    attached: () => this.form.controls.documents.value.length,
+    done: (doc) => {
+      const docs = this.form.controls.documents;
+      docs.setValue([...docs.value, doc]);
+      docs.markAsDirty();
+      docs.markAsTouched();
+    },
   });
-
-  /** Validates and uploads files. Returns messages for files that were refused up front. */
-  addFiles(files: File[]): string[] {
-    const problems: string[] = [];
-    for (const file of files) {
-      if (this.documentCount() >= FILE_RULES.maxFiles) {
-        problems.push(`You can add up to ${FILE_RULES.maxFiles} files.`);
-        break;
-      }
-      const problem = checkFile(file);
-      if (problem) {
-        problems.push(problem);
-        continue;
-      }
-      const upload: Upload = { key: crypto.randomUUID(), file, progress: 0, state: 'uploading' };
-      this.uploads.update((list) => [...list, upload]);
-      this.start(upload);
-    }
-    return problems;
-  }
-
-  retryUpload(key: string): void {
-    const upload = this.uploads().find((u) => u.key === key);
-    if (upload) this.start(upload);
-  }
-
-  cancelUpload(key: string): void {
-    this.uploads()
-      .find((u) => u.key === key)
-      ?.sub?.unsubscribe();
-    this.uploads.update((list) => list.filter((u) => u.key !== key));
-  }
 
   removeDocument(id: string): void {
     const docs = this.form.controls.documents;
     docs.setValue(docs.value.filter((d) => d.id !== id));
     docs.markAsDirty();
-    const url = this.previews()[id];
-    if (url) URL.revokeObjectURL(url);
-  }
-
-  private start(upload: Upload): void {
-    this.patchUpload(upload.key, { state: 'uploading', progress: 0, error: undefined });
-    const sub = this.api.upload(upload.file).subscribe({
-      next: (event) => {
-        if (event.type === HttpEventType.UploadProgress && event.total) {
-          this.patchUpload(upload.key, {
-            progress: Math.round((event.loaded / event.total) * 100),
-          });
-        }
-        if (event.type === HttpEventType.Response && event.body) {
-          const doc = event.body;
-          if (upload.file.type.startsWith('image/')) {
-            this.previews.update((p) => ({ ...p, [doc.id]: URL.createObjectURL(upload.file) }));
-          }
-          this.uploads.update((list) => list.filter((u) => u.key !== upload.key));
-          const docs = this.form.controls.documents;
-          docs.setValue([...docs.value, doc]);
-          docs.markAsDirty();
-          docs.markAsTouched();
-        }
-      },
-      error: (err: unknown) =>
-        this.patchUpload(upload.key, { state: 'error', error: errorMessage(err) }),
-    });
-    this.patchUpload(upload.key, { sub });
-  }
-
-  private patchUpload(key: string, patch: Partial<Upload>): void {
-    this.uploads.update((list) => list.map((u) => (u.key === key ? { ...u, ...patch } : u)));
+    this.uploader.forget(id);
   }
 
   /* ---------------------------------- validation --------------------------------- */

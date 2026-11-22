@@ -7,6 +7,7 @@ import {
   ClaimDocument,
   ClaimInput,
   ClaimPage,
+  ClaimReply,
   ClaimStatus,
   Policy,
   PublicClaim,
@@ -63,6 +64,10 @@ export class Api {
 
   track(number: string, lastName: string): Observable<PublicClaim> {
     return this.http.get<PublicClaim>('/api/track', { params: params({ number, lastName }) });
+  }
+
+  reply(reply: ClaimReply): Observable<PublicClaim> {
+    return this.http.post<PublicClaim>('/api/track/reply', reply);
   }
 
   /* Staff side */

@@ -459,7 +459,7 @@ export class ClaimWizard {
       this.checking.set(false);
     }
 
-    if (step.id === 'documents' && this.f.uploads().some((u) => u.state === 'uploading')) {
+    if (step.id === 'documents' && this.f.uploader.busy()) {
       this.summary.set([
         {
           live: false,

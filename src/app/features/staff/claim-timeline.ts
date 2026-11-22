@@ -21,7 +21,7 @@ interface Row {
   icon: IconName;
   text: string;
   /** Status messages to the claimant vs internal notes, styled differently. */
-  noteKind: 'claimant' | 'internal' | null;
+  noteKind: 'claimant' | 'internal' | 'reply' | null;
 }
 
 /** Internal notes form plus the full claim history, newest first. */
@@ -79,9 +79,24 @@ interface Row {
                 <blockquote [class]="r.noteKind">
                   @if (r.noteKind === 'claimant') {
                     <span class="label">Message to claimant</span>
+                  } @else if (r.noteKind === 'reply') {
+                    <span class="label">Reply from claimant</span>
                   }
                   {{ r.event.note }}
                 </blockquote>
+              }
+              @if (r.event.documents?.length) {
+                <ul class="attached" aria-label="Files sent with the reply">
+                  @for (d of r.event.documents; track d.id) {
+                    <li>
+                      <app-icon
+                        [name]="d.mimeType.startsWith('image/') ? 'image' : 'file'"
+                        [size]="13"
+                      />
+                      {{ d.name }}
+                    </li>
+                  }
+                </ul>
               }
               <time [attr.datetime]="r.event.at">{{ r.event.at | date: 'MMM d, y, h:mm a' }}</time>
             </div>
@@ -177,6 +192,12 @@ interface Row {
       &.claimant {
         background: var(--info-soft);
       }
+      &.reply {
+        background: var(--success-soft);
+        .label {
+          color: var(--success);
+        }
+      }
       .label {
         display: block;
         margin-bottom: 2px;
@@ -184,6 +205,32 @@ interface Row {
         font-weight: 600;
         color: var(--info);
       }
+    }
+    .attached {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 8px 0 0;
+      padding: 0;
+      list-style: none;
+      li {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        max-width: 100%;
+        padding: 3px 9px;
+        border: 1px solid var(--border);
+        border-radius: 99px;
+        font-size: 12.5px;
+        color: var(--text-2);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+    .reply .marker {
+      background: var(--success-soft);
+      color: var(--success);
     }
     time {
       display: block;
@@ -224,6 +271,13 @@ export class ClaimTimeline {
           };
         case 'note':
           return { event, icon: 'message', text: 'added a note', noteKind: 'internal' };
+        case 'reply':
+          return {
+            event,
+            icon: 'send',
+            text: 'replied, so the claim is back in review',
+            noteKind: 'reply',
+          };
         case 'status': {
           const to = event.to!;
           return {

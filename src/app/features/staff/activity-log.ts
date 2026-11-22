@@ -11,6 +11,7 @@ import { StaffContext } from './staff-context';
 
 const ACTIONS: { value: AuditAction; label: string; icon: IconName }[] = [
   { value: 'claim_submitted', label: 'Claim submitted', icon: 'send' },
+  { value: 'claimant_replied', label: 'Claimant replied', icon: 'message' },
   { value: 'status_changed', label: 'Status changed', icon: 'circle-check' },
   { value: 'assigned', label: 'Assigned', icon: 'user-check' },
   { value: 'note_added', label: 'Note added', icon: 'message' },
@@ -192,6 +193,10 @@ interface LogQuery {
       &.status_changed {
         background: var(--primary-soft);
         color: var(--primary);
+      }
+      &.claimant_replied {
+        background: var(--success-soft);
+        color: var(--success);
       }
       &.claim_submitted {
         background: var(--info-soft);

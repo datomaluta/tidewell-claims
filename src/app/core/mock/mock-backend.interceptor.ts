@@ -26,6 +26,7 @@ import {
   ClaimEvent,
   ClaimInput,
   ClaimPage,
+  ClaimReply,
   ClaimStatus,
   ClaimSummary,
   PublicClaim,
@@ -91,6 +92,9 @@ function handle(req: HttpRequest<unknown>): Result {
   // Public endpoints (the claimant side).
   if (resource === 'policies' && id && req.method === 'GET') return policy(id);
   if (resource === 'claims' && !id && req.method === 'POST') return submit(req.body as ClaimInput);
+  if (resource === 'track' && id === 'reply' && req.method === 'POST') {
+    return reply(req.body as ClaimReply | null);
+  }
   if (resource === 'track' && req.method === 'GET')
     return track(q.get('number'), q.get('lastName'));
   if (resource === 'auth' && id === 'login' && req.method === 'POST') {
@@ -171,22 +175,68 @@ function submit(input: ClaimInput | null): Result {
   return ok(claim, 201);
 }
 
-function track(number: string | null, lastName: string | null): Result {
-  const claim = db.claims.find(
+/** Claimants identify a claim by its number and their last name. */
+function findForClaimant(number: string | null | undefined, lastName: string | null | undefined) {
+  return db.claims.find(
     (c) =>
       c.number.toUpperCase() === number?.trim().toUpperCase() &&
       c.claimant.lastName.toLowerCase() === lastName?.trim().toLowerCase(),
   );
-  if (!claim) {
-    return fail(404, "We couldn't find a claim with that number and last name.");
+}
+
+const NOT_FOUND = "We couldn't find a claim with that number and last name.";
+
+function track(number: string | null, lastName: string | null): Result {
+  const claim = findForClaimant(number, lastName);
+  return claim ? ok(publicView(claim)) : fail(404, NOT_FOUND);
+}
+
+function reply(body: ClaimReply | null): Result {
+  const claim = findForClaimant(body?.number, body?.lastName);
+  if (!body || !claim) return fail(404, NOT_FOUND);
+  if (claim.status !== 'needs_info') {
+    return fail(409, "This claim isn't waiting for more information any more.");
   }
+  const message = body.message?.trim() ?? '';
+  if (!message) return fail(422, 'Write a short reply for the claims team.');
+  if (message.length > 2000) return fail(422, 'Replies can be up to 2000 characters.');
+  const documents = Array.isArray(body.documents) ? body.documents : [];
+  if (claim.documents.length + documents.length > 20) {
+    return fail(422, 'This claim already has a lot of files. Call us to send more.');
+  }
+
+  const claimant = `${claim.claimant.firstName} ${claim.claimant.lastName}`;
+  claim.documents.push(...documents);
+  claim.status = 'in_review';
+  pushEvent(claim, {
+    kind: 'reply',
+    actorName: claimant,
+    from: 'needs_info',
+    to: 'in_review',
+    note: message,
+    documents,
+  });
+  const files = documents.length
+    ? ` with ${documents.length} ${documents.length === 1 ? 'file' : 'files'}`
+    : '';
+  audit(claim, null, claimant, 'claimant_replied', `Replied${files}: ${message}`);
+  db.save();
+  return ok(publicView(claim));
+}
+
+function publicView(claim: Claim): PublicClaim {
   const timeline: PublicClaim['timeline'] = claim.events
-    .filter((e) => e.kind === 'submitted' || e.kind === 'status')
+    .filter((e) => e.kind === 'submitted' || e.kind === 'status' || e.kind === 'reply')
     .map((e) => ({
       at: e.at,
       status: e.kind === 'submitted' ? 'submitted' : e.to!,
-      // Only messages meant for the claimant are shared; internal notes stay internal.
-      message: e.kind === 'status' && requiresNote(e.to!) ? (e.note ?? null) : null,
+      // Only messages meant for the claimant (and their own replies) are shared.
+      // Internal notes stay internal.
+      message:
+        e.kind === 'reply' || (e.kind === 'status' && requiresNote(e.to!))
+          ? (e.note ?? null)
+          : null,
+      fromClaimant: e.kind === 'reply',
     }));
   const view: PublicClaim = {
     number: claim.number,
@@ -197,7 +247,7 @@ function track(number: string | null, lastName: string | null): Result {
     total: claim.total,
     timeline,
   };
-  return ok(view);
+  return view;
 }
 
 function upload(req: HttpRequest<unknown>): Observable<HttpEvent<unknown>> {
@@ -300,9 +350,15 @@ function list(q: URLSearchParams, user: StaffUser): Result {
     createdAt: c.createdAt,
     incidentDate: c.incident.date,
     assigneeId: c.assigneeId,
+    replied: c.status === 'in_review' && lastStatusEvent(c)?.kind === 'reply',
   }));
 
   return ok({ items, total: sorted.length, page, pageSize, counts } satisfies ClaimPage);
+}
+
+/** The last event that moved the claim between statuses. */
+function lastStatusEvent(claim: Claim): ClaimEvent | undefined {
+  return [...claim.events].reverse().find((e) => e.kind === 'status' || e.kind === 'reply');
 }
 
 function transition(claim: Claim, to: ClaimStatus, note: string | undefined, user: StaffUser) {

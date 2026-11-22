@@ -79,7 +79,7 @@ interface DbState {
 }
 
 const KEY = 'tidewell.db';
-const VERSION = 2;
+const VERSION = 3;
 
 class Db {
   private state: DbState = this.load();
@@ -297,7 +297,8 @@ function seed(): DbState {
     const total = items.reduce((s, it) => s + it.amount, 0);
     const assignee = status === 'submitted' ? (rnd() < 0.3 ? pick(agents) : null) : pick(agents);
     const id = `c-${seq}`;
-    const number = `TW-${new Date(created).getFullYear()}-${String(seq).padStart(5, '0')}`;
+    // Numbers use the current year so the demo claim shown on the tracking page stays valid.
+    const number = `TW-${new Date(now).getFullYear()}-${String(seq).padStart(5, '0')}`;
     const cause = pick(HOME_CAUSES).value;
     const [make, model] = pick(CARS);
     const otherParty = type === 'auto' && rnd() < 0.4;

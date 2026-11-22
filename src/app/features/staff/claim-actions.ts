@@ -276,7 +276,14 @@ export class ClaimActions {
 
   private readonly user = computed(() => this.auth.user());
   protected readonly closed = computed(() => isFinal(this.claim().status));
-  protected readonly guidance = computed(() => GUIDANCE[this.claim().status]);
+  protected readonly guidance = computed(() => {
+    const claim = this.claim();
+    const last = [...claim.events].reverse().find((e) => e.kind === 'status' || e.kind === 'reply');
+    if (claim.status === 'in_review' && last?.kind === 'reply') {
+      return 'The claimant replied to your request. Read their answer in the history below, then approve, reject or ask again.';
+    }
+    return GUIDANCE[claim.status];
+  });
   protected readonly options = computed(() => {
     const user = this.user();
     return user ? transitionOptions(this.claim(), user) : [];

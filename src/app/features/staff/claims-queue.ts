@@ -210,7 +210,16 @@ function parseQuery(params: ParamMap): QueueQuery {
                         </div>
                       </div>
                     </td>
-                    <td><app-status-badge [status]="c.status" /></td>
+                    <td>
+                      <div class="status">
+                        <app-status-badge [status]="c.status" />
+                        @if (c.replied) {
+                          <span class="replied" title="The claimant replied">
+                            <app-icon name="message" [size]="13" /> Reply
+                          </span>
+                        }
+                      </div>
+                    </td>
                     <td class="num">{{ c.total | currency: 'USD' : 'symbol' : '1.0-0' }}</td>
                     <td class="hide-md muted">{{ c.incidentDate | date: 'MMM d' }}</td>
                     <td class="hide-sm muted">{{ c.createdAt | date: 'MMM d, y' }}</td>
@@ -402,6 +411,23 @@ function parseQuery(params: ParamMap): QueueQuery {
     .num {
       text-align: right;
       font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .replied {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 99px;
+      background: var(--success-soft);
+      color: var(--success);
+      font-size: 12px;
       font-weight: 500;
     }
     .assignee {
