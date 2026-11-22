@@ -478,3 +478,24 @@ function seedItems(
 
 /** Created last so the seed data above is initialised before the first load. */
 export const db = new Db();
+
+/**
+ * Seeded claims carry made-up policy numbers. Their policy is rebuilt from the claim itself,
+ * so staff see a limit and deductible for every claim, not only the three demo policies.
+ */
+export function policyFromClaims(number: string): Policy | null {
+  const claim = db.claims.find((c) => c.policyNumber === number);
+  if (!claim) return null;
+  const auto = claim.type === 'auto';
+  return {
+    number,
+    type: claim.type,
+    holderName: `${claim.claimant.firstName} ${claim.claimant.lastName}`,
+    validFrom: shiftDays(claim.incident.date, -200),
+    validTo: shiftDays(claim.incident.date, 165),
+    coverageLimit: auto ? 25_000 : 150_000,
+    deductible: auto ? 500 : 1_000,
+    vehicle: claim.incident.auto?.vehicle ?? null,
+    address: auto ? null : claim.incident.location,
+  };
+}

@@ -45,7 +45,10 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authed = token ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : req;
   return next(authed).pipe(
     catchError((err: unknown) => {
-      if (err instanceof HttpErrorResponse && err.status === 401 && token) {
+      // Several requests can fail at once; only the first one redirects.
+      const firstFailure = token !== null && auth.token() === token;
+      const onSignIn = router.url.startsWith('/staff/sign-in');
+      if (err instanceof HttpErrorResponse && err.status === 401 && firstFailure && !onSignIn) {
         auth.signOut(false);
         void router.navigate(['/staff/sign-in'], {
           queryParams: { returnUrl: router.url, expired: 1 },
@@ -54,6 +57,12 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       return throwError(() => err);
     }),
   );
+};
+
+/** Keeps signed-in staff away from the sign-in page. */
+export const signedOutGuard: CanActivateFn = () => {
+  if (!inject(AuthService).user()) return true;
+  return inject(Router).createUrlTree(['/staff']);
 };
 
 export const staffGuard: CanActivateFn = (_route, state) => {

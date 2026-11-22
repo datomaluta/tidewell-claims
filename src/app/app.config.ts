@@ -26,9 +26,13 @@ export const appConfig: ApplicationConfig = {
       withViewTransitions({
         // Only animate between pages. Query param changes (wizard steps, table filters) stay instant.
         onViewTransitionCreated: ({ transition, from, to }) => {
-          // A skipped or interrupted transition rejects `ready`; that is expected, not an error.
-          transition.ready.catch(() => undefined);
-          if (leaf(from).routeConfig === leaf(to).routeConfig) transition.skipTransition();
+          // The transition still runs, just without animation. Skipping it would make Angular log
+          // an AbortError in dev mode.
+          if (leaf(from).routeConfig !== leaf(to).routeConfig) return;
+          const root = document.documentElement;
+          root.classList.add('no-view-transition');
+          const done = () => root.classList.remove('no-view-transition');
+          transition.finished.then(done, done);
         },
       }),
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),

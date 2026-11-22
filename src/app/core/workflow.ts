@@ -56,7 +56,10 @@ export function canTransition(claim: ClaimRef, to: ClaimStatus, user: StaffUser)
   }
   if (user.role === 'manager') return allow;
 
-  if (claim.assigneeId !== user.id) return deny('Assign this claim to yourself first.');
+  if (!claim.assigneeId) return deny('Assign this claim to yourself first.');
+  if (claim.assigneeId !== user.id) {
+    return deny('Only the assigned agent or a manager can work on this claim.');
+  }
   if (to === 'rejected') return deny('Only a manager can reject a claim.');
   if (to === 'paid') return deny('Only a manager can mark a claim as paid.');
   if (to === 'approved' && claim.total > AGENT_APPROVAL_LIMIT) {

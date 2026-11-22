@@ -34,7 +34,7 @@ import {
 } from '../models';
 import { checkFile, normalizePolicyNumber, sumAmounts } from '../validators';
 import { canAssign, canTransition, requiresNote } from '../workflow';
-import { STAFF, db, demoPolicies, uid } from './mock-db';
+import { STAFF, db, demoPolicies, policyFromClaims, uid } from './mock-db';
 
 /**
  * A fake REST backend implemented as an HTTP interceptor.
@@ -75,9 +75,9 @@ function respond(req: HttpRequest<unknown>, result: Result, latency: number) {
     });
     return timer(latency).pipe(mergeMap(() => throwError(() => error)));
   }
-  return of(new HttpResponse({ status: result.status, body: result.body, url: req.url })).pipe(
-    delay(latency),
-  );
+  // Clone like a real JSON response would, so the app never holds a reference into the database.
+  const body = structuredClone(result.body);
+  return of(new HttpResponse({ status: result.status, body, url: req.url })).pipe(delay(latency));
 }
 
 function handle(req: HttpRequest<unknown>): Result {
@@ -132,12 +132,16 @@ function handle(req: HttpRequest<unknown>): Result {
 /* --------------------------------- public -------------------------------- */
 
 function policy(number: string): Result {
-  const found = demoPolicies().find((p) => p.number === normalizePolicyNumber(number));
+  const normalized = normalizePolicyNumber(number);
+  const found = demoPolicies().find((p) => p.number === normalized) ?? policyFromClaims(normalized);
   return found ? ok(found) : fail(404, 'Policy not found.');
 }
 
 function submit(input: ClaimInput | null): Result {
-  const policy = input && demoPolicies().find((p) => p.number === input.policyNumber);
+  const policy =
+    input &&
+    (demoPolicies().find((p) => p.number === input.policyNumber) ??
+      policyFromClaims(input.policyNumber));
   if (!input || !policy) return fail(422, 'The policy number is not valid.');
   if (input.incident.date < policy.validFrom || input.incident.date > policy.validTo) {
     return fail(422, 'The incident date is outside the policy period.');

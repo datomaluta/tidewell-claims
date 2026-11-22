@@ -429,6 +429,7 @@ textarea {
   background: var(--surface-2);
   overflow-x: auto;
   max-width: 100%;
+  scrollbar-width: none;
 
   button {
     display: inline-flex;
@@ -514,6 +515,11 @@ textarea {
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation-duration: 0.18s;
+}
+
+.no-view-transition::view-transition-old(root),
+.no-view-transition::view-transition-new(root) {
+  animation: none;
 }
 
 @media (max-width: 720px) {
