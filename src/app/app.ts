@@ -1,12 +1,16 @@
-import { Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { ConfirmDialog } from './shared/ui/confirm-dialog';
+import { Toaster } from './shared/ui/toaster';
 
 @Component({
-  imports: [RouterOutlet],
   selector: 'app-root',
-  styleUrl: './app.scss',
-  templateUrl: './app.html',
+  imports: [RouterOutlet, Toaster, ConfirmDialog],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <router-outlet />
+    <app-toaster />
+    <app-confirm-dialog />
+  `,
 })
-export class App {
-  protected readonly title = signal('tidewell-claims');
-}
+export class App {}
