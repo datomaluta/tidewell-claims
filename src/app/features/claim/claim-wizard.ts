@@ -220,9 +220,11 @@ type Draft = NonNullable<ReturnType<ClaimFormService['readDraft']>>;
       }
       li {
         position: relative;
+        display: flex;
       }
       button {
         display: flex;
+        flex: 1;
         align-items: center;
         gap: 8px;
         width: 100%;
