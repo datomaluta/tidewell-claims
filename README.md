@@ -2,6 +2,8 @@
 
 An insurance claims portal built with **Angular 22**, for a fictional insurer called Tidewell. Customers file auto or home claims through a five-step form and track them online. Staff work through a claims queue where each action follows the claim workflow and the user's role.
 
+**Live demo: [tidewell-claim.vercel.app](https://tidewell-claim.vercel.app)** (staff demo accounts below, no passwords)
+
 The backend is mocked inside the app (an HTTP interceptor that behaves like a REST API and keeps its data in `localStorage`). It runs with no server and deploys as a static site.
 
 ![Claims queue, dark theme](docs/screenshots/staff-queue-dark.png)
